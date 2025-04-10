@@ -21,7 +21,7 @@ async function verifyKey(apiKey) {
   }
 }
 
-async function main() {
+async function dnse(edomain,ezone,eapi){
   try {
     // Get Public IP
     const getPublicIP = async () => {
@@ -40,7 +40,7 @@ async function main() {
 
     // Get A Records for play.divergence.live
     let prodDNS = await new Promise((resolve, reject) => {
-      dns.resolve4(process.env.DOMAIN, (err, addresses) => {
+      dns.resolve4(edomain, (err, addresses) => {
         if (err) reject(err);
         resolve(addresses);
       });
@@ -51,7 +51,7 @@ async function main() {
       console.log(chalk.green("Public IP and DNS match"));
     } else {
       console.log(chalk.yellow("Public IP and DNS do not match"));
-      const apiKey = process.env.CLOUDFLARE_API_KEY;
+      const apiKey = eapi;
       if (!(await verifyKey(apiKey))) {
         console.error(chalk.red("Invalid API Key"));
         return;
@@ -59,27 +59,27 @@ async function main() {
         console.log(chalk.green("Valid API Key"));
       }
       // List DNS Records
-      const listURL = `https://api.cloudflare.com/client/v4/zones/${process.env.ZONE}/dns_records`;
+      const listURL = `https://api.cloudflare.com/client/v4/zones/${ezone}/dns_records`;
       const listHeaders = {
         Authorization: `Bearer ${apiKey}`,
       };
       const listResponse = await axios.get(listURL, { headers: listHeaders });
       for (let record of listResponse.data.result) {
-        if (record.name === process.env.DOMAIN && record.type === "A") {
+        if (record.name === edomain && record.type === "A") {
           console.log(chalk.blue("Cloudflare DNS A Record:"), record.content);
           if (record.content !== publicIP) {
             console.log(chalk.yellow("Updating DNS Record"));
-            const updateURL = `https://api.cloudflare.com/client/v4/zones/${process.env.ZONE}/dns_records/${record.id}`;
+            const updateURL = `https://api.cloudflare.com/client/v4/zones/${ezone}/dns_records/${record.id}`;
             const updateHeaders = {
               Authorization: `Bearer ${apiKey}`,
               "Content-Type": "application/json",
             };
             const updateData = {
               type: "A",
-              name: process.env.DOMAIN,
+              name: edomain,
               content: publicIP,
               ttl: 1,
-              proxied: true,
+              proxied: false,
             };
             const updateResponse = await axios.put(updateURL, updateData, {
               headers: updateHeaders,
@@ -99,6 +99,14 @@ async function main() {
     console.log(chalk.red(error));
     return;
   }
+}
+
+async function main() {
+  dnse(
+    process.env.DOMAIN,
+    process.env.ZONE,
+    process.env.CLOUDFLARE_API_KEY
+  );
 }
 
 main();
