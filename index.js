@@ -1,10 +1,8 @@
-// Import required modules
 import dns from "dns";
 import chalk from "chalk";
 import dotenv from "dotenv";
 import axios from "axios";
 
-// Load environment variables from .env file
 dotenv.config();
 
 /**
@@ -32,7 +30,6 @@ async function verifyKey(apiKey) {
  * @param {string} eapi - The Cloudflare API key.
  */
 async function dnse(edomain, ezone, eapi) {
-  // Helper to get the current public IP address
   const getPublicIP = async () => {
     try {
       const response = await fetch("https://api.ipify.org?format=json");
@@ -43,11 +40,9 @@ async function dnse(edomain, ezone, eapi) {
     }
   };
 
-  // Get Public IP
   let publicIP = await getPublicIP();
   console.log(chalk.blue(`Public IP for ${edomain}:`), publicIP);
 
-  // Get A Records for the domain
   let prodDNS = await new Promise((resolve, reject) => {
     dns.resolve4(edomain, (err, addresses) => {
       if (err) reject(err);
@@ -56,13 +51,11 @@ async function dnse(edomain, ezone, eapi) {
   });
   console.log(chalk.blue("DNS A Record:"), prodDNS[0]);
 
-  // Compare public IP with DNS A record
   if (publicIP === prodDNS[0]) {
     console.log(chalk.green("Public IP and DNS match"));
   } else {
     console.log(chalk.yellow("Public IP and DNS do not match"));
 
-    // Verify API Key before making changes
     const apiKey = eapi;
     if (!(await verifyKey(apiKey))) {
       console.log(chalk.red("Invalid API Key"));
@@ -71,14 +64,12 @@ async function dnse(edomain, ezone, eapi) {
       console.log(chalk.green("Valid API Key"));
     }
 
-    // List DNS Records from Cloudflare
     const listURL = `https://api.cloudflare.com/client/v4/zones/${ezone}/dns_records`;
     const listHeaders = {
       Authorization: `Bearer ${apiKey}`,
     };
     const listResponse = await axios.get(listURL, { headers: listHeaders });
 
-    // Find and update the A record if needed
     for (let record of listResponse.data.result) {
       if (record.name === edomain && record.type === "A") {
         console.log(chalk.blue("Cloudflare DNS A Record:"), record.content);
@@ -114,7 +105,6 @@ async function dnse(edomain, ezone, eapi) {
  * Main function to verify API key and check/update DNS for configured domains.
  */
 async function main() {
-  // Verify API Key before proceeding
   if (!(await verifyKey(process.env.CLOUDFLARE_API_KEY))) {
     console.error(chalk.red("Invalid API Key"));
     throw new Error("Invalid API Key");
@@ -122,14 +112,12 @@ async function main() {
     console.log(chalk.green("Valid API Key"));
   }
 
-  // Check and update DNS for the first domain
   await dnse(
     process.env.DOMAIN,
     process.env.ZONE,
     process.env.CLOUDFLARE_API_KEY
   );
 
-  // Check and update DNS for the second domain
   await dnse(
     process.env.DOMAIN2,
     process.env.ZONE2,
@@ -137,8 +125,6 @@ async function main() {
   );
 }
 
-// Run main once at startup
 main();
 
-// Schedule main to run every 5 minutes
 setInterval(main, 300000);
