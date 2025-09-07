@@ -5,6 +5,18 @@ import axios from "axios";
 
 dotenv.config();
 
+// Logging helper
+function log(level, color, message) {
+  const now = new Date();
+  const time = now.toTimeString().split(" ")[0];
+  const pad = (str, len = 8) => (str + " ".repeat(len)).slice(0, len);
+  console.log(
+    chalk[color](`[${pad(level.toUpperCase())}${time}]`) +
+      chalk.reset(" ") +
+      message
+  );
+}
+
 /**
  * Verifies the provided Cloudflare API key.
  * @param {string} apiKey - The API key to verify.
@@ -30,18 +42,25 @@ async function verifyKey(apiKey) {
  * @param {string} eapi - The Cloudflare API key.
  */
 async function dnse(edomain, ezone, eapi) {
+  // Test internet connection
+  
+
   const getPublicIP = async () => {
     try {
       const response = await fetch("https://api.ipify.org?format=json");
       const data = await response.json();
       return data.ip;
     } catch (error) {
-      console.error(chalk.red(error));
+      return false;
     }
   };
 
   let publicIP = await getPublicIP();
-  console.log(chalk.blue(`Public IP for ${edomain}:`), publicIP);
+  if (publicIP == false) {
+    log("ERROR", "red", "Could not fetch public IP");
+    return;
+  }
+  log("INFO", "blue", `Public IP for ${edomain}: ${publicIP}`);
 
   let prodDNS = await new Promise((resolve, reject) => {
     dns.resolve4(edomain, (err, addresses) => {
@@ -49,19 +68,19 @@ async function dnse(edomain, ezone, eapi) {
       resolve(addresses);
     });
   });
-  console.log(chalk.blue("DNS A Record:"), prodDNS[0]);
+  log("INFO", "blue", `DNS A Record: ${prodDNS[0]}`);
 
   if (publicIP === prodDNS[0]) {
-    console.log(chalk.green("Public IP and DNS match"));
+    log("INFO", "green", "Public IP and DNS match");
   } else {
-    console.log(chalk.yellow("Public IP and DNS do not match"));
+    log("WARNING", "yellow", "Public IP and DNS do not match");
 
     const apiKey = eapi;
     if (!(await verifyKey(apiKey))) {
-      console.log(chalk.red("Invalid API Key"));
+      log("ERROR", "red", "Invalid API Key");
       return;
     } else {
-      console.log(chalk.green("Valid API Key"));
+      log("INFO", "green", "Valid API Key");
     }
 
     const listURL = `https://api.cloudflare.com/client/v4/zones/${ezone}/dns_records`;
@@ -72,9 +91,9 @@ async function dnse(edomain, ezone, eapi) {
 
     for (let record of listResponse.data.result) {
       if (record.name === edomain && record.type === "A") {
-        console.log(chalk.blue("Cloudflare DNS A Record:"), record.content);
+        log("INFO", "blue", `Cloudflare DNS A Record: ${record.content}`);
         if (record.content !== publicIP) {
-          console.log(chalk.yellow("Updating DNS Record"));
+          log("WARNING", "yellow", "Updating DNS Record");
           const updateURL = `https://api.cloudflare.com/client/v4/zones/${ezone}/dns_records/${record.id}`;
           const updateHeaders = {
             Authorization: `Bearer ${apiKey}`,
@@ -88,12 +107,12 @@ async function dnse(edomain, ezone, eapi) {
             proxied: false,
           };
           await axios.put(updateURL, updateData, { headers: updateHeaders });
-          console.log(chalk.green("DNS Record Updated"));
+          log("INFO", "green", "DNS Record Updated");
         } else {
-          console.log(
-            chalk.green(
-              "DNS Record is already up to date. Please wait for DNS propagation."
-            )
+          log(
+            "INFO",
+            "green",
+            "DNS Record is already up to date. Please wait for DNS propagation."
           );
         }
       }
@@ -105,11 +124,28 @@ async function dnse(edomain, ezone, eapi) {
  * Main function to verify API key and check/update DNS for configured domains.
  */
 async function main() {
+  const testInternet = async () => {
+    try {
+      await axios.get("https://one.one.one.one");
+      return true;
+    } catch (error) {
+      return false;
+    }
+  };
+
+  const internet = await testInternet();
+  if (!internet) {
+    log("ERROR", "red", "Internet is not reachable");
+    return;
+  }
+  log("INFO", "green", "Internet is reachable");
+
+
   if (!(await verifyKey(process.env.CLOUDFLARE_API_KEY))) {
-    console.error(chalk.red("Invalid API Key"));
+    log("ERROR", "red", "Invalid API Key");
     throw new Error("Invalid API Key");
   } else {
-    console.log(chalk.green("Valid API Key"));
+    log("INFO", "green", "Valid API Key");
   }
 
   await dnse(
